@@ -43,7 +43,7 @@ jobs:
             if (!(Test-Path $package)) {
               throw "Required Lazarus package not found: $package"
             }
-            & $lazbuild "--add-package-link=$package"
+            & $lazbuild "--add-package-link" $package
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to register Lazarus package: $package"
             }
