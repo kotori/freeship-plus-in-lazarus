@@ -20,40 +20,78 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Lazarus and Free Pascal
+      - name: Install official Lazarus 4.8 and Free Pascal 3.2.2
         shell: pwsh
         run: |
-          choco install lazarus --yes --no-progress
-          $lazarus = "C:\lazarus"
-          if (!(Test-Path "$lazarus\lazbuild.exe")) {
-            throw "Could not find lazbuild.exe under $lazarus after installing Lazarus."
+          $installer = Join-Path $env:RUNNER_TEMP "lazarus-4.8-fpc-3.2.2-win64.exe"
+          $url = "https://downloads.sourceforge.net/project/lazarus/Lazarus%20Windows%2064%20bits/Lazarus%204.8/lazarus-4.8-fpc-3.2.2-win64.exe"
+          $expectedHash = "ED25EE171D55E23CF14E0633159FDD2325EFBA56E186F8AB817AD3BF97D267D7"
+
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          $actualHash = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
+          if ($actualHash -ne $expectedHash) {
+            throw "Lazarus installer SHA-256 mismatch. Expected $expectedHash, got $actualHash."
           }
+
+          $process = Start-Process -FilePath $installer -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-") -Wait -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Lazarus installer failed with exit code $($process.ExitCode)."
+          }
+
+          $lazarus = "C:\lazarus"
+          $fpc = "$lazarus\fpc\3.2.2\bin\x86_64-win64"
+          if (!(Test-Path "$lazarus\lazbuild.exe") -or !(Test-Path "$fpc\fpc.exe")) {
+            throw "The official Lazarus installer did not place lazbuild.exe and fpc.exe in the expected locations."
+          }
+
+          # Make the compiler available to tools invoked by lazbuild.
+          "$lazarus;$fpc" | Out-File -FilePath $env:GITHUB_PATH -Append
           "LAZARUS_DIR=$lazarus" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "FPC_DIR=$fpc" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Configure Free Pascal
+        shell: pwsh
+        run: |
+          $fpc = "$env:FPC_DIR\fpc.exe"
+          $fpcmkcfg = "$env:FPC_DIR\fpcmkcfg.exe"
+          if (!(Test-Path $fpcmkcfg)) {
+            throw "The Lazarus installation is missing fpcmkcfg.exe."
+          }
+
+          & $fpcmkcfg -d "basepath=$env:LAZARUS_DIR\fpc\3.2.2" -o "$env:FPC_DIR\fpc.cfg"
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path "$env:FPC_DIR\fpc.cfg")) {
+            throw "Could not generate the Free Pascal compiler configuration."
+          }
+
+          & $fpc -iV
+          if ($LASTEXITCODE -ne 0) {
+            throw "Free Pascal could not start with its generated configuration."
+          }
 
       - name: Register Lazarus component packages
         shell: pwsh
         run: |
-          $lazbuild = "$env:LAZARUS_DIR\lazbuild.exe"
           $packages = @(
             "$env:LAZARUS_DIR\components\lazcontrols\lazcontrols.lpk",
             "$env:LAZARUS_DIR\components\tachart\tachartlazaruspkg.lpk",
             "$env:LAZARUS_DIR\components\printers\printer4lazarus.lpk"
           )
+
           foreach ($package in $packages) {
             if (!(Test-Path $package)) {
-              throw "Required Lazarus package not found: $package"
+              throw "The official Lazarus installation is missing required package source: $package"
             }
-            & $lazbuild "--add-package-link" $package
+
+            & "$env:LAZARUS_DIR\lazbuild.exe" --add-package-link $package
             if ($LASTEXITCODE -ne 0) {
-              throw "Failed to register Lazarus package: $package"
+              throw "Lazarus could not register package: $package"
             }
           }
 
       - name: Prepare revision metadata expected by the project
         shell: pwsh
         run: |
-          # The project's legacy pre-build script reads this loose ref directly.
-          # GitHub Actions may store refs in packed-refs instead.
+          # The project's pre-build script reads this Git ref directly.
           New-Item -ItemType Directory -Force .git\refs\heads | Out-Null
           $master = git rev-parse origin/master
           if ($LASTEXITCODE -ne 0 -or !$master) {
@@ -82,8 +120,8 @@ jobs:
           }
           @"
           FreeSHIP Windows x64 build
-          
-          This is a build of the kotori/freeship-plus-in-lazarus save-fix branch.
+
+          Built from kotori/freeship-plus-in-lazarus.
           Extract the ZIP and run FreeShip.exe.
           "@ | Set-Content dist\README.txt
           Compress-Archive -Path dist\* -DestinationPath FreeShip-Windows-x64.zip -Force
