@@ -20,12 +20,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install official Lazarus 4.8 and Free Pascal 3.2.2
+      - name: Install official Lazarus 3.2 and Free Pascal 3.2.2
         shell: pwsh
         run: |
-          $installer = Join-Path $env:RUNNER_TEMP "lazarus-4.8-fpc-3.2.2-win64.exe"
-          $url = "https://download.lazarus-ide.org/Lazarus%20Windows%2064%20bits/Lazarus%204.8/lazarus-4.8-fpc-3.2.2-win64.exe"
-          $expectedHash = "ED25EE171D55E23CF14E0633159FDD2325EFBA56E186F8AB817AD3BF97D267D7"
+          $installer = Join-Path $env:RUNNER_TEMP "lazarus-3.2-fpc-3.2.2-win64.exe"
+          $url = "https://download.lazarus-ide.org/Lazarus%20Windows%2064%20bits/Lazarus%203.2/lazarus-3.2-fpc-3.2.2-win64.exe"
+          $expectedHash = "78605F116251C60595108FCF41004EE3DDC0B5CC7C22143E52A53FA1ED629D54"
 
           Invoke-WebRequest -Uri $url -OutFile $installer
           $actualHash = (Get-FileHash -Path $installer -Algorithm SHA256).Hash
@@ -72,6 +72,7 @@ jobs:
         shell: pwsh
         run: |
           $packages = @(
+            "$env:LAZARUS_DIR\components\lazutils\lazutils.lpk",
             "$env:LAZARUS_DIR\components\lazcontrols\lazcontrols.lpk",
             "$env:LAZARUS_DIR\components\tachart\tachartlazaruspkg.lpk",
             "$env:LAZARUS_DIR\components\printers\printer4lazarus.lpk"
