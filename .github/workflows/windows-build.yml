@@ -37,7 +37,7 @@ jobs:
           $packages = @(
             "$env:LAZARUS_DIR\components\lazcontrols\lazcontrols.lpk",
             "$env:LAZARUS_DIR\components\tachart\tachartlazaruspkg.lpk",
-            "$env:LAZARUS_DIR\components\printer\printer4lazarus.lpk"
+            "$env:LAZARUS_DIR\components\printers\printer4lazarus.lpk"
           )
           foreach ($package in $packages) {
             if (!(Test-Path $package)) {
