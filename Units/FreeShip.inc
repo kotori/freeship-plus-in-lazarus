@@ -2444,6 +2444,9 @@ begin
   if NumberOfDiagonals > 0 then result := fv180;
   if NumberOfMarkers > 0 then result := fv191;
 
+  // Control curves were added to the binary format in version 1.95.
+  if Surface.NumberOfControlCurves > 0 then result := fv195;
+
   if (FResistanceDelftData.EndSpeed>0) or (FResistanceKaperData.Draft>0)
   then result := fv210;
 
@@ -2524,13 +2527,16 @@ end;{TFreeShip.DetectMinresult}
 procedure TFreeShip.SaveProject(Destination: TFreeFileBuffer);
 var
   PrevCursor: TCursor;
+  MinVersion: TFreeFileVersion;
   I,N: integer;
 begin
   //PrevCursor := Screen.Cursor;
   //Screen.Cursor := crHourGlass;
   try
     Logger.Debug('SaveProject');
-    DetectMinFileVersion;
+    MinVersion := DetectMinFileVersion;
+    if FileVersion < MinVersion then
+      FileVersion := MinVersion;
     Destination.Encoding := Preferences.FbmEncoding;
     Destination.Add('FREE!ship');
     Destination.Add(FileVersion);
