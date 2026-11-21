@@ -16,7 +16,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -24,7 +24,7 @@ jobs:
         shell: pwsh
         run: |
           $installer = Join-Path $env:RUNNER_TEMP "lazarus-4.8-fpc-3.2.2-win64.exe"
-          $url = "https://downloads.sourceforge.net/project/lazarus/Lazarus%20Windows%2064%20bits/Lazarus%204.8/lazarus-4.8-fpc-3.2.2-win64.exe"
+          $url = "https://download.lazarus-ide.org/Lazarus%20Windows%2064%20bits/Lazarus%204.8/lazarus-4.8-fpc-3.2.2-win64.exe"
           $expectedHash = "ED25EE171D55E23CF14E0633159FDD2325EFBA56E186F8AB817AD3BF97D267D7"
 
           Invoke-WebRequest -Uri $url -OutFile $installer
