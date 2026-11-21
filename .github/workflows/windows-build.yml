@@ -1,0 +1,104 @@
+name: Build FreeSHIP for Windows
+
+on:
+  push:
+    branches:
+      - save-fix
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Lazarus and Free Pascal
+        shell: pwsh
+        run: |
+          choco install lazarus --yes --no-progress
+          $lazarus = "C:\lazarus"
+          if (!(Test-Path "$lazarus\lazbuild.exe")) {
+            throw "Could not find lazbuild.exe under $lazarus after installing Lazarus."
+          }
+          "LAZARUS_DIR=$lazarus" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Register Lazarus component packages
+        shell: pwsh
+        run: |
+          $lazbuild = "$env:LAZARUS_DIR\lazbuild.exe"
+          $packages = @(
+            "$env:LAZARUS_DIR\components\lazcontrols\lazcontrols.lpk",
+            "$env:LAZARUS_DIR\components\tachart\tachartlazaruspkg.lpk",
+            "$env:LAZARUS_DIR\components\printer\printer4lazarus.lpk"
+          )
+          foreach ($package in $packages) {
+            if (!(Test-Path $package)) {
+              throw "Required Lazarus package not found: $package"
+            }
+            & $lazbuild "--add-package-link=$package"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to register Lazarus package: $package"
+            }
+          }
+
+      - name: Prepare revision metadata expected by the project
+        shell: pwsh
+        run: |
+          # The project's legacy pre-build script reads this loose ref directly.
+          # GitHub Actions may store refs in packed-refs instead.
+          New-Item -ItemType Directory -Force .git\refs\heads | Out-Null
+          $master = git rev-parse origin/master
+          if ($LASTEXITCODE -ne 0 -or !$master) {
+            throw "Could not resolve origin/master."
+          }
+          Set-Content -NoNewline .git\refs\heads\master $master
+
+      - name: Build 64-bit Windows release
+        shell: pwsh
+        run: |
+          & "$env:LAZARUS_DIR\lazbuild.exe" --build-all --build-mode="Win64 Release" FreeShip.lpi
+          if ($LASTEXITCODE -ne 0) {
+            throw "FreeSHIP compilation failed."
+          }
+          if (!(Test-Path "FreeShip.exe")) {
+            throw "The build completed without producing FreeShip.exe."
+          }
+
+      - name: Package Windows executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item FreeShip.exe dist\
+          if (Test-Path locale) {
+            Copy-Item locale dist\locale -Recurse
+          }
+          @"
+          FreeSHIP Windows x64 build
+          
+          This is a build of the kotori/freeship-plus-in-lazarus save-fix branch.
+          Extract the ZIP and run FreeShip.exe.
+          "@ | Set-Content dist\README.txt
+          Compress-Archive -Path dist\* -DestinationPath FreeShip-Windows-x64.zip -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreeSHIP-Windows-x64
+          path: FreeShip-Windows-x64.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release for version tags
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          generate_release_notes: true
+          files: FreeShip-Windows-x64.zip
